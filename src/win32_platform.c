@@ -16,8 +16,8 @@
 
 global const int window_width = 1024;
 global const int window_height = 768;
-global const int framebuffer_width = 320;
-global const int framebuffer_height = 240;
+global const int framebuffer_width = 1024;
+global const int framebuffer_height = 768;
 global const int target_fps = 60;
 
 LRESULT CALLBACK win32_window_procedure(HWND   hwnd,

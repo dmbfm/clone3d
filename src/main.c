@@ -114,7 +114,7 @@ inline int is_zero(real32 x, real32 eps) {
     return ((x >= -eps) && (x <= eps));
 }
 
-inline real32 deg_to_rad(int deg) {
+inline real32 deg_to_rad(real32 deg) {
     return (deg * (M_PI / 180.0f));
 }
 
@@ -270,8 +270,8 @@ void Update(Video *video, PlatformLayer *platform, Memory *memory, InputState *i
 	{0, 1, 0, 0, 0, 0, 0, 0, 1, 0},
 	{0, 1, 0, 0, 1, 1, 0, 0, 1, 0},
 	{0, 1, 0, 0, 0, 0, 0, 0, 1, 0},
-	{0, 1, 0, 0, 0, 0, 0, 0, 1, 0},
-	{0, 1, 0, 0, 0, 0, 0, 0, 1, 0},
+	{0, 1, 0, 0, 1, 0, 1, 0, 1, 0},
+	{0, 1, 1, 0, 0, 0, 0, 0, 1, 0},
 	{0, 1, 1, 1, 1, 1, 1, 1, 1, 0},
 	{0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
     };
@@ -293,10 +293,10 @@ void Update(Video *video, PlatformLayer *platform, Memory *memory, InputState *i
     {
 	--state->offsetX;
 
-	--state->player_view_angle;
-	if (state->player_view_angle < 0)
+	++state->player_view_angle;
+	if (state->player_view_angle >= 360)
 	{
-	    state->player_view_angle = 359;
+	    state->player_view_angle = 0;
 	}
     }
 
@@ -304,12 +304,11 @@ void Update(Video *video, PlatformLayer *platform, Memory *memory, InputState *i
     {
 	++state->offsetX;
 
-	++state->player_view_angle;
-	if (state->player_view_angle >= 360)
+	--state->player_view_angle;
+	if (state->player_view_angle < 0)
 	{
-	    state->player_view_angle = 0;
+	    state->player_view_angle = 359;
 	}
-	
     }
 
     if (input->key_up.is_down)
@@ -319,8 +318,22 @@ void Update(Video *video, PlatformLayer *platform, Memory *memory, InputState *i
 	real32 fx = cosf(deg_to_rad(state->player_view_angle));
 	real32 fy = sinf(deg_to_rad(state->player_view_angle));
 
+	real32 pX = state->playerX;
+	real32 pY = state->playerY;
+	
 	state->playerX += 0.01f * fx;
 	state->playerY += 0.01f * fy;
+	
+	/* int cell_x = (int) state->playerX; */
+	/* int cell_y = (int) state->playerY; */
+
+	/* int cell_value = ((int *) map)[(10 * (9 - cell_y)) + cell_x]; */
+	
+	/* if (cell_value) */
+	/* { */
+	/*     state->playerX = pX; */
+	/*     state->playerY = pY; */
+	/* } */
 
 	if (state->playerX > 10.0f)
 	{
@@ -366,24 +379,38 @@ void Update(Video *video, PlatformLayer *platform, Memory *memory, InputState *i
     real32 player_dir_y = sinf(deg_to_rad(state->player_view_angle));
 
     const real32 fov = 30.0f;
+
+
+    const real32 n = 0.1f;
+    const real32 L = 0.05f;
+    const real32 W = (real32) video->width - 1;
     
     for (int x = 0; x < video->width; ++x)
     {
-	real32 angle = (((2 * fov) / video->width) * x) - fov;
-	
-	real32 dir_x = cosf(deg_to_rad(state->player_view_angle + angle));
-	real32 dir_y = sinf(deg_to_rad(state->player_view_angle + angle));
-    
-	// draw line
-	real32 line_length = 1.0f * tile_size * sqrtf(2);
-	Color line_color =  { 0.0f, 0.0f, 1.0f };
-	draw_line(video,
-		  tile_size * state->playerX,
-		  tile_size * state->playerY,
-		  line_length * dir_x + (tile_size * state->playerX),
-		  line_length * dir_y + (tile_size * state->playerY),
-		  &line_color);
 
+	real32 player_dir_x = cosf(deg_to_rad(state->player_view_angle));
+	real32 player_dir_y = sinf(deg_to_rad(state->player_view_angle));
+
+	real32 side_x = -player_dir_y;
+	real32 side_y = player_dir_x;
+
+	real32 view_plane_center_x = player_dir_x * n;
+	real32 view_plane_center_y = player_dir_y * n;
+
+	real32 temp1 = ((W * L) - (2 * x * L)) / W;
+	real32 pixel_vec_magnitude = sqrtf(n * n  + temp1 * temp1);
+
+	real32 pixel_dir_x = (n * player_dir_x  + temp1 * side_x) / pixel_vec_magnitude;
+	real32 pixel_dir_y = (n * player_dir_y  + temp1 * side_y) / pixel_vec_magnitude;
+	
+//	real32 angle = fov - (((2 * fov) / video->width) * x);
+	
+//	real32 dir_x = cosf(deg_to_rad(state->player_view_angle + angle));
+//	real32 dir_y = sinf(deg_to_rad(state->player_view_angle + angle));
+
+	real32 dir_x = pixel_dir_x;
+	real32 dir_y = pixel_dir_y;
+    
 
 	// RAYCAST TEST
 
@@ -402,10 +429,15 @@ void Update(Video *video, PlatformLayer *platform, Memory *memory, InputState *i
 	int inc_x = (dir_x > 0) ? 1 : -1;
 	int inc_y = (dir_y > 0) ? 1 : -1;
 
+	int fy = (dir_y > 0) ? 0 : 1;
+	int fx = (dir_x > 0) ? 0 : 1;
     
-    
-	while (current_x < 10 && current_x >= 0  && current_y < 10 && current_y >= 0 && !hit)
+	bool32 side = false;
+	while (current_x <= 10 && current_x >= 0  && current_y <= 10 && current_y >= 0 && !hit)
 	{
+//	    cell_x = (int) current_x;
+//	    cell_y = (int) current_y;
+	    
 	    int cell_value = ((int *) map)[(10 * (9 - cell_y)) + cell_x];
 	    if (cell_value == 1)
 	    {
@@ -416,25 +448,49 @@ void Update(Video *video, PlatformLayer *platform, Memory *memory, InputState *i
 	    int next_cell_x = cell_x + inc_x;
 	    int next_cell_y = cell_y + inc_y;
 	    
-	    real32 dtx = (next_cell_x - current_x) / dir_x;
-	    real32 dty = (next_cell_y - current_y) / dir_y;
-	    
+	    real32 dtx = (((real32)next_cell_x + fx) - current_x) / dir_x;
+	    real32 dty = (((real32)next_cell_y + fy) - current_y) / dir_y;
+
 	    if (dtx < dty)
 	    {
 		cell_x = next_cell_x;
 		t += dtx;
+		side = true;
 	    }
 	    else
 	    {
 		cell_y = next_cell_y;
 		t += dty;
+		side = false;
 	    }
 
 	    current_x = start_x + dir_x * t;
 	    current_y = start_y + dir_y * t;
 	}
 
-	uint32 height = (uint32) (100.0f / t);
-	draw_column(video, x, height, 0.0f, 0.0f, 1.0f /(0.1f + t));
+	if (!hit) DebugLog(platform, "No hit!");
+
+	
+
+//	real32 z = (t * cosf(deg_to_rad(angle)));
+	real32 z = t * n / sqrtf(n * n + temp1 * temp1);
+
+	//if (z < n) DebugLog(platform, "Z < n\n  !!");
+
+	real32 line_length = tile_size * t;
+	Color line_color =  { 0.0f, 0.0f, 1.0f };
+	draw_line(video,
+		  tile_size * state->playerX,
+		  tile_size * state->playerY,
+		  line_length * dir_x + (tile_size * state->playerX),
+		  line_length * dir_y + (tile_size * state->playerY),
+		  &line_color);
+	
+	//draw_rectangle(video, tile_size * cell_x - 2.0f, tile_size * cell_y - 2.0f, 4, 4, 0.0f, 1.0f, 0.0f);
+
+	real32 h0 = video->height * 0.4f;
+	uint32 height = (uint32) (h0  / z);
+
+	draw_column(video, x, height, side ? 1.0f : 0.0f, 0.0f, side ? 0.0f : 1.0f);
     }
 }
