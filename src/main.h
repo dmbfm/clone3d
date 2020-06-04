@@ -59,10 +59,23 @@ typedef struct
 
 typedef struct
 {
+    int x_pos;
+    int y_pos;
+    int last_x_pos;
+    int last_y_pos;
+    int delta_x;
+    int delta_y;
+} MouseState;
+
+typedef struct
+{
     KeyState key_left;
     KeyState key_right;
     KeyState key_up;
     KeyState key_down;
+    KeyState key_esc;
+
+    MouseState mouse;
 } InputState;
 
 inline void key_state_set(KeyState *k, bool32 is_down, bool32 was_down)
@@ -73,8 +86,38 @@ inline void key_state_set(KeyState *k, bool32 is_down, bool32 was_down)
 
 typedef struct
 {
+    void *buffer;
+    uint64 size;
+} ReadFileResult;
+
+typedef struct
+{
     void (*print_string)(const char *str);
+    bool32 (*read_entire_file)(const char *str, ReadFileResult *result);
+
 } PlatformLayer;
+
+
+typedef struct
+{
+    uint32 size_in_bytes;
+    int32 width;
+    int32 height;
+    uint16 bits_per_pixel;
+    int32 row_size;
+    void *pixels;
+} Bitmap;
+
+typedef struct {
+    int offsetX;
+    int offsetY;
+    
+    real32 playerX;
+    real32 playerY;
+    // TODO: make this real32, or, make that we go from 0 to 36000 or something, instead
+    // of 0, 360
+    int16 player_view_angle;
+} State;
 
 void Update(Video *video, PlatformLayer *platform, Memory *memory, InputState *input);
 

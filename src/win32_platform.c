@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <windows.h>
+#include <windowsx.h>
 #include <strsafe.h>
 #include <wingdi.h>
 #include <gl/gl.h>
@@ -40,9 +41,49 @@ LRESULT CALLBACK win32_window_procedure(HWND   hwnd,
     }
 }
 
+bool32 read_entire_file(const char *filename, ReadFileResult *result)
+{
+    HANDLE file_handle = CreateFileA(
+	filename,
+	GENERIC_READ,
+	FILE_SHARE_READ,
+	0,
+	OPEN_EXISTING,
+	FILE_ATTRIBUTE_NORMAL,
+	0);
+
+    if (file_handle == INVALID_HANDLE_VALUE)
+    {
+	OutputDebugStringA("Error opening file!");
+	return;
+    }
+
+    LARGE_INTEGER file_size = {0};
+    GetFileSizeEx(file_handle, &file_size);
+
+    OutputDebugStringFmt("File size = %lld\n", file_size.QuadPart);
+
+    void *buffer = (void *) malloc(file_size.QuadPart);
+
+    if (!ReadFile(file_handle,
+	     buffer,
+	     file_size.QuadPart,
+	     0,
+		  0)) {
+	return false;
+    }
+
+    result->buffer = buffer;
+    result->size = (uint64) file_size.QuadPart;
+
+    return true;
+}
+
 void process_messages(Win32PlatformState *win32_platform, InputState *input)
 {
     MSG message;
+    MouseState *mouse = &input->mouse;
+    
     while(PeekMessage(&message, 0, 0, 0, PM_REMOVE))
     {
 	switch(message.message)
@@ -51,7 +92,13 @@ void process_messages(Win32PlatformState *win32_platform, InputState *input)
 	    {
 		OutputDebugStringA("WM_QUIT\n");
 		win32_platform->is_running = 0;
-	    }break;
+	    } break;
+
+	    case WM_MOUSEMOVE:
+	    {
+		mouse->x_pos = GET_X_LPARAM(message.lParam);
+		mouse->y_pos = GET_Y_LPARAM(message.lParam);
+	    } break;
 
 	    case WM_SYSKEYDOWN:
 	    case WM_SYSKEYUP:
@@ -70,11 +117,13 @@ void process_messages(Win32PlatformState *win32_platform, InputState *input)
 		    switch(vk)
 		    {
 			case VK_UP:
+			case 'W':
 			{
 			    key_state_set(&input->key_up, is_down, was_down);
 			} break;
 
 			case VK_DOWN:
+			case 'S':
 			{
 			    key_state_set(&input->key_down, is_down, was_down);
 			} break;
@@ -88,6 +137,11 @@ void process_messages(Win32PlatformState *win32_platform, InputState *input)
 			{
 			    key_state_set(&input->key_right, is_down, was_down);
 			} break;
+
+			case VK_ESCAPE:
+			{
+			    key_state_set(&input->key_esc, is_down, was_down);
+			}
 				
 			default: {} break;
 		    }
@@ -347,6 +401,7 @@ int APIENTRY WinMain(HINSTANCE hInstance,
 
     PlatformLayer win32_platform_layer = {0};
     win32_platform_layer.print_string = OutputDebugStringA;
+    win32_platform_layer.read_entire_file = read_entire_file;
     
     glUseProgram(shader_program);
     glClearColor(1.0, 0.0, 0.0, 1.0);
@@ -362,20 +417,42 @@ int APIENTRY WinMain(HINSTANCE hInstance,
     int target_ns = (int) ((1.0f / target_fps) * 1000000.0f);
 
     win32_platform.is_running = true;
+
+    SetCapture(window_handler);
+    ShowCursor(false);
+
+    ReadFileResult file = {0};
+    
     while(win32_platform.is_running)
     {
 	QueryPerformanceCounter(&p_start);
-
 	
 	glClear(GL_COLOR_BUFFER_BIT);
 
 	process_messages(&win32_platform, &input);
+
+	if (input.key_esc.is_down)
+	{
+	    win32_platform.is_running = false;
+	}
+
+	POINT center = { window_width / 2, window_height / 2 };
+	ClientToScreen(window_handler, &center);
+	SetCursorPos(center.x, center.y);
+	
+
+	MouseState *mouse = &input.mouse;
+	mouse->delta_x = mouse->x_pos - (window_width / 2);
+	mouse->delta_y = mouse->y_pos - mouse->last_y_pos;
+	mouse->last_x_pos = mouse->x_pos;
+	mouse->last_y_pos = mouse->y_pos;
 
 	Update(&video, &win32_platform_layer, &memory, &input);
 
 	present_framebuffer(&win32_platform, &video);
 
 	QueryPerformanceCounter(&p_end);
+
 	p_ellapsed_ns.QuadPart = p_end.QuadPart - p_start.QuadPart;
 	p_ellapsed_ns.QuadPart *= 1000000;
 	p_ellapsed_ns.QuadPart /= p_freq.QuadPart;
@@ -384,12 +461,11 @@ int APIENTRY WinMain(HINSTANCE hInstance,
 	{
 	    int sleep_time = (int) (target_ns - p_ellapsed_ns.QuadPart);
 	    sleep_time /= 1000;
-	    //OutputDebugStringFmt("sleep for: %d\n", sleep_time);
 	    Sleep((DWORD) sleep_time);
 	}
-	//OutputDebugStringFmt("milliseconds = %llu,  target = %d \n", p_ellapsed_ns.QuadPart, target_ns);
     }
 
+    ReleaseCapture();
     ReleaseDC(window_handler, device_context);
     return 0;
 }
