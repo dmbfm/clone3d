@@ -9,6 +9,8 @@
 #include "win32_platform.h"
 #include "win32_opengl.h"
 
+#include "math.c"
+#include "graphics.c"
 #include "main.c"
 #include "win32_opengl.c"
 
@@ -55,7 +57,7 @@ bool32 read_entire_file(const char *filename, ReadFileResult *result)
     if (file_handle == INVALID_HANDLE_VALUE)
     {
 	OutputDebugStringA("Error opening file!");
-	return;
+	return false;
     }
 
     LARGE_INTEGER file_size = {0};
@@ -64,11 +66,11 @@ bool32 read_entire_file(const char *filename, ReadFileResult *result)
     OutputDebugStringFmt("File size = %lld\n", file_size.QuadPart);
 
     void *buffer = (void *) malloc(file_size.QuadPart);
-
+    
     if (!ReadFile(file_handle,
-	     buffer,
-	     file_size.QuadPart,
-	     0,
+		  buffer,
+		  (DWORD) file_size.QuadPart,
+		  0,
 		  0)) {
 	return false;
     }
@@ -158,7 +160,7 @@ void process_messages(Win32PlatformState *win32_platform, InputState *input)
     }
 }
 
-void present_framebuffer(Win32PlatformState *state, Video *video)
+void present_framebuffer(Win32PlatformState *state, Texture *video)
 {
     glTexSubImage2D(GL_TEXTURE_2D,
 		    0,
@@ -168,7 +170,7 @@ void present_framebuffer(Win32PlatformState *state, Video *video)
 		    framebuffer_height,
 		    GL_RGBA,
 		    GL_UNSIGNED_BYTE,
-		    video->framebuffer);
+		    video->pixels);
     
     glBindVertexArray(state->vao);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
@@ -265,16 +267,16 @@ int APIENTRY WinMain(HINSTANCE hInstance,
 	return(-1);
     }
 
-    Video video = {0};
-    video.framebuffer = (uint32 *) win32_platform.memory_storage;
+    Texture video = {0};
+    video.pixels = (uint32 *) win32_platform.memory_storage;
     video.width = framebuffer_width;
     video.height = framebuffer_height;
-    video.bytes_per_pixel = 4;
-    video.total_size_in_bytes = 4 * video.width * video.height;
+
+    int video_size_in_bytes = 4 * video.width * video.height;
 
     Memory memory = {0};
-    memory.storage = ((char *) win32_platform.memory_storage) + video.total_size_in_bytes;
-    memory.size = win32_platform.memory_storage_size - video.total_size_in_bytes;
+    memory.storage = ((char *) win32_platform.memory_storage) + video_size_in_bytes;
+    memory.size = win32_platform.memory_storage_size - video_size_in_bytes;
 
     InputState input = {0};
     
@@ -396,7 +398,7 @@ int APIENTRY WinMain(HINSTANCE hInstance,
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-    glTexImage2D(GL_TEXTURE_2D, 0,  GL_RGB, framebuffer_width, framebuffer_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, video.framebuffer);
+    glTexImage2D(GL_TEXTURE_2D, 0,  GL_RGB, framebuffer_width, framebuffer_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, video.pixels);
     glActiveTexture(GL_TEXTURE0);
 
     PlatformLayer win32_platform_layer = {0};
@@ -421,8 +423,6 @@ int APIENTRY WinMain(HINSTANCE hInstance,
     SetCapture(window_handler);
     ShowCursor(false);
 
-    ReadFileResult file = {0};
-    
     while(win32_platform.is_running)
     {
 	QueryPerformanceCounter(&p_start);
@@ -436,7 +436,10 @@ int APIENTRY WinMain(HINSTANCE hInstance,
 	    win32_platform.is_running = false;
 	}
 
-	POINT center = { window_width / 2, window_height / 2 };
+	POINT center = { 0 };
+	center.x = window_width / 2;
+	center.y = window_height  / 2;
+	
 	ClientToScreen(window_handler, &center);
 	SetCursorPos(center.x, center.y);
 	

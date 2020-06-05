@@ -1,14 +1,17 @@
 #if !defined(MAIN_H)
+#define MAIN_H
 
 #include <stdint.h>
 
-#define MAIN_H
 
 #define global static
 #define local_persist static
 
 #define false 0
 #define true !(false)
+
+#define TEXTURE_RGB 0x00
+#define TEXTURE_RGBA 0x01
 
 #define KB(x) (1024*x)
 #define MB(x) (1024*KB(x))
@@ -33,16 +36,11 @@ typedef int32 bool32;
 
 typedef struct
 {
-    uint32 *framebuffer;
     uint32 width;
     uint32 height;
-    uint32 bytes_per_pixel;
-
-    // NOTE(daniel): stride is the number of bytes in a pixel row, which may include a
-    // padding.
-    uint32 stride;
-    uint32 total_size_in_bytes;
-} Video;
+    uint32 *pixels;
+    uint16 format;
+} Texture;
 
 typedef struct
 {
@@ -97,17 +95,6 @@ typedef struct
 
 } PlatformLayer;
 
-
-typedef struct
-{
-    uint32 size_in_bytes;
-    int32 width;
-    int32 height;
-    uint16 bits_per_pixel;
-    int32 row_size;
-    void *pixels;
-} Bitmap;
-
 typedef struct {
     int offsetX;
     int offsetY;
@@ -117,8 +104,10 @@ typedef struct {
     // TODO: make this real32, or, make that we go from 0 to 36000 or something, instead
     // of 0, 360
     int16 player_view_angle;
+
+    uint32 pixels[10000];
 } State;
 
-void Update(Video *video, PlatformLayer *platform, Memory *memory, InputState *input);
+void Update(Texture *video, PlatformLayer *platform, Memory *memory, InputState *input);
 
 #endif
