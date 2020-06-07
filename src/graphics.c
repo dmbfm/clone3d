@@ -18,10 +18,8 @@ void draw_texture(Texture *src, Texture *dst, int x0, int y0)
     {
 	for (uint32 y = 0; y < src->height; ++y)
 	{
-	    //uint32 *row = &src->pixels[y * src->width];
 	    for (uint32 x = 0; x < src->width; ++x)
 	    {
-		//uint32 *pixel = &row[x];
 		uint8 src_r, src_g, src_b, src_a;
 		texture_get_rgba(src, x, y, &src_r, &src_g, &src_b, &src_a);
 
@@ -48,10 +46,8 @@ void put_pixel(Texture *tex, int x, int y, uint32 color)
         return;
     }
     
-    
     uint32 *pixel = &tex->pixels[y * tex->width + x];
-    
-    *pixel = color; // ((color->a) << 24) | ((color->b) << 16) | ((color->g) << 8) | (color->r);
+    *pixel = color;
 }
 
 void texture_get_pixel(Texture *tex, int x, int y, uint32 *color)

@@ -19,6 +19,7 @@
 
 global State *state;
 global Bitmap test_bitmap;
+global Texture test_bitmap_texture;
 
 void test_tex_sample(Bitmap *bitmap, real32 u, real32 v, Color *c)
 {
@@ -36,7 +37,7 @@ void test_tex_sample(Bitmap *bitmap, real32 u, real32 v, Color *c)
     c->a = 255;
 }
 
-void draw_column(Texture *video, uint32 x, uint32 height, real32 r, real32 g, real32 b, real32 u, Bitmap *bitmap)
+void draw_column(Texture *video, uint32 x, uint32 height, real32 r, real32 g, real32 b, real32 u, Texture *texture)
 {
     if (x >= video->width || height == 0)
     {
@@ -60,13 +61,15 @@ void draw_column(Texture *video, uint32 x, uint32 height, real32 r, real32 g, re
     {
         uint32 *pixel = &(video->pixels[j * video->width + x]);
 
-	int tx = round32(u * (bitmap->width-1));
-	int ty = round32(v * (bitmap->height-1));
+	int tx = round32(u * (texture->width-1));
+	int ty = round32(v * (texture->height-1));
 	
-	uint8 *tpixel = &((uint8 *)bitmap->pixels)[(ty * bitmap->row_size) + (3 * tx)];
-	uint8 _b = tpixel[0];
-	uint8 _g = tpixel[1];
-	uint8 _r = tpixel[2];
+	//uint8 *tpixel = &((uint8 *)texture->pixels)[(ty * texture->row_size) + (3 * tx)];
+	uint8 *texture_pixel = (uint8 *) &texture->pixels[ty * texture->width + tx];
+
+	uint8 _r = *texture_pixel++;
+	uint8 _g = *texture_pixel++;
+	uint8 _b = *texture_pixel++;
         uint8 a = 255;
 
 	    
@@ -119,6 +122,75 @@ void test_draw_bitmap(Bitmap *bitmap, Texture *video, PlatformLayer *platform)
     }
 }
 
+bool32 load_bitmap_from_file(PlatformLayer *p, const char *filename, Bitmap *bitmap)
+{
+    ReadFileResult result;
+    if (!p->read_entire_file("Blue5.bmp", &result))
+    {
+	return false;
+    }
+
+    char *bytes = (char *) result.buffer;
+    uint32 size = *((uint32 *)(bytes + 2));
+    uint32 offset = *((uint32 *)(bytes+10));
+    //uint32 comp = *((uint32 *)(bytes+30));
+    int32 width = *((int32 *)(bytes+18));
+    int32 height = *((int32 *)(bytes+22));
+    int32 bpp = *((int32 *)(bytes+28));
+    int32 row_size = ceil32((bpp * width) / 32.0f) * 4;
+    
+    void *pixels = (void *) (bytes + offset);
+
+    bitmap->size_in_bytes = size;
+    bitmap->width = width;
+    bitmap->height = height;
+    bitmap->bits_per_pixel = (uint16) bpp;
+    bitmap->row_size = row_size;
+    bitmap->pixels = pixels;
+
+    return true;
+}
+
+bool32 load_bitmap_from_file_into_texture(PlatformLayer *p, const char *filename, Texture *texture)
+{
+    Bitmap bitmap = {0};
+
+    if (!load_bitmap_from_file(p, filename, &bitmap))
+    {
+	return false;
+    }
+
+    texture->width = bitmap.width;
+    texture->height = bitmap.height;
+    texture->format = TEXTURE_RGB;
+
+    // TODO: Memory arena 
+    //texture->pixels = (uint32 *) malloc(texture->width * texture->height * sizeof(uint32));
+
+    if (!texture->pixels)
+    {
+	return false;
+    }
+
+    uint8 *bitmap_pixels = (uint8 *) bitmap.pixels;
+    for (int y = 0; y < bitmap.height; ++y)
+    {
+	uint8 *bitmap_row = &bitmap_pixels[bitmap.row_size * y];
+	for (int x = 0; x < bitmap.width; ++x)
+	{
+	    uint8 *pixel = &bitmap_row[3 * x];
+
+	    uint8 b = pixel[0];
+	    uint8 g = pixel[1];
+	    uint8 r = pixel[2];
+
+	    texture->pixels[texture->width * y + x] = PACK_RGB(r, g, b);
+	}
+    }
+
+    return true;
+}   
+
 void Update(Texture *video, PlatformLayer *platform, Memory *memory, InputState *input)
 {
     
@@ -148,43 +220,9 @@ void Update(Texture *video, PlatformLayer *platform, Memory *memory, InputState 
         state->playerX = 3.0f;
         state->playerY = 3.0f;
 
-
-	ReadFileResult result;
-	platform->read_entire_file("Blue5.bmp", &result);
-
-	char *bytes = (char *) result.buffer;
-	uint32 size = *((uint32 *)(bytes + 2));
-	DebugLog(platform, " SIZE = %d \n", size);
-
-	uint32 offset = *((uint32 *)(bytes+10));
-	DebugLog(platform, " OFFSET = %d \n", offset);
-
-	uint32 comp = *((uint32 *)(bytes+30));
-	DebugLog(platform, " COMPRESSION = %d \n", comp);
-
-	int32 width = *((int32 *)(bytes+18));
-	DebugLog(platform, " W = %d \n", width);
-
-	int32 height = *((int32 *)(bytes+22));
-	DebugLog(platform, " H = %d \n", height);
-
-	int32 bpp = *((int32 *)(bytes+28));
-	DebugLog(platform, " BPP = %d \n", bpp);
-
-	int32 row_size = ceil32((bpp * width) / 32.0f) * 4;
-	DebugLog(platform, " ROW SIZE = %d  vs %d \n", row_size, width * bpp / 8);
-
-    
-	void *pixels = (void *) (bytes + offset);
-
-	test_bitmap.size_in_bytes = size;
-	test_bitmap.width = width;
-	test_bitmap.height = height;
-	test_bitmap.bits_per_pixel = (uint16) bpp;
-	test_bitmap.row_size = row_size;
-	test_bitmap.pixels = pixels;
-
-	test_draw_bitmap(&test_bitmap, video, platform);
+	// TODO: Memory arena
+	test_bitmap_texture.pixels = (uint32 *) ((char *)memory->storage + sizeof(State));
+	load_bitmap_from_file_into_texture(platform, "Blue5.bmp", &test_bitmap_texture);
     }
     
     if (input->key_left.is_down)
@@ -275,7 +313,8 @@ void Update(Texture *video, PlatformLayer *platform, Memory *memory, InputState 
     
     const real32 n = 0.1f;
     const real32 L = 0.05f;
-    const real32 W = (real32) video->width - 1;
+    //const real32 W = (real32) video->width - 1;
+    const real32 W = (real32) video->width;
     
     for (uint32 x = 0; x < video->width; ++x)
     {
@@ -289,7 +328,8 @@ void Update(Texture *video, PlatformLayer *platform, Memory *memory, InputState 
         //real32 view_plane_center_x = player_dir_x * n;
         //real32 view_plane_center_y = player_dir_y * n;
         
-        real32 temp1 = ((W * L) - (2 * x * L)) / W;
+        //real32 temp1 = ((W * L) - (2 * x * L)) / W;
+	real32 temp1 = (L * (W - 1 - 2*x)) / W;
         real32 pixel_vec_magnitude = sqrtf(n * n  + temp1 * temp1);
         
         real32 pixel_dir_x = (n * player_dir_x  + temp1 * side_x) / pixel_vec_magnitude;
@@ -353,12 +393,13 @@ void Update(Texture *video, PlatformLayer *platform, Memory *memory, InputState 
         }
         
         if (!hit) {
-	    DebugLog(platform, "No hit!");
+	    DebugLog(platform, "No hit! %d", x);
 	    continue;
 	}
         
         
-        real32 z = t * n / sqrtf(n * n + temp1 * temp1);
+        //real32 z = t * n / sqrtf(n * n + temp1 * temp1);
+	real32 z = ((player_dir_x * (current_x - start_x)) + (player_dir_y * (current_y - start_y)));
         real32 line_length = tile_size * t;
         draw_line(&map_tex,
                   (int) (tile_size * state->playerX),
@@ -374,7 +415,7 @@ void Update(Texture *video, PlatformLayer *platform, Memory *memory, InputState 
 	real32 tex_side = (current_y - cell_y);
 	real32 tex_not_side = (current_x - cell_x);
         
-        draw_column(video, x, height, side ? tex_side : 0.0f, 0.0f, side ? 0.0f : tex_not_side, side ? tex_side : tex_not_side, &test_bitmap);
+        draw_column(video, x, height, side ? tex_side : 0.0f, 0.0f, side ? 0.0f : tex_not_side, side ? tex_side : tex_not_side, &test_bitmap_texture);
     }
 
     draw_texture(&map_tex, video, 0, 0);
